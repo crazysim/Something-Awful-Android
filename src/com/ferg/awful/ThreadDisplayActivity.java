@@ -30,7 +30,6 @@ package com.ferg.awful;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -76,8 +75,9 @@ import com.ferg.awful.reply.Reply;
 import com.ferg.awful.thread.AwfulPost;
 import com.ferg.awful.thread.AwfulThread;
 import com.ferg.awful.thumbnail.ThumbnailAdapter;
+import com.ferg.awful.widget.NumberPicker;
 
-public class ThreadDisplayActivity extends Activity implements OnSharedPreferenceChangeListener {
+public class ThreadDisplayActivity extends AwfulActivity implements OnSharedPreferenceChangeListener {
     private static final String TAG = "ThreadDisplayActivity";
 
 	private AwfulThread mThread;
@@ -90,9 +90,7 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
 	private ImageButton mReply;
     private ListView mPostList;
 	private ProgressDialog mDialog;
-    private RelativeLayout mPageIndicator;
     private SharedPreferences mPrefs;
-    private TextView mPageNumbers;
     private TextView mTitle;
 
     // These just store values from shared preferences. This way, we only have to do redraws
@@ -106,7 +104,7 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-		
+        
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
         mDefaultPostFontSize = mPrefs.getInt("default_post_font_size", 15);
         mDefaultPostFontColor = mPrefs.getInt("default_post_font_color", getResources().getColor(R.color.default_post_font));
@@ -115,8 +113,6 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
         mTitle    = (TextView) findViewById(R.id.title);
         mNext     = (ImageButton) findViewById(R.id.next_page);
         mReply    = (ImageButton) findViewById(R.id.reply);
-        mPageIndicator = (RelativeLayout) findViewById(R.id.page_indicator);
-        mPageNumbers   = (TextView) findViewById(R.id.page_text);
 
         registerForContextMenu(mPostList);
         
@@ -160,18 +156,6 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
 
 		mNext.setOnClickListener(onButtonClick);
 		mReply.setOnClickListener(onButtonClick);
-
-        mPostList.setOnScrollListener(new AbsListView.OnScrollListener() {
-            public void onScroll(AbsListView aView, int aFirstVisibleItem, int aVisibleItemCount, int aTotalItemCount) {}
-
-            public void onScrollStateChanged(AbsListView aView, int aScrollState) {
-                if (aScrollState == AbsListView.OnScrollListener.SCROLL_STATE_IDLE) {
-                    mPageIndicator.setVisibility(View.INVISIBLE);
-                } else {
-                    mPageIndicator.setVisibility(View.VISIBLE);
-                }
-            }
-        });
     }
     
     @Override
@@ -204,49 +188,24 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
         super.onPause();
 
         mPrefs.unregisterOnSharedPreferenceChangeListener(this);
-        
-        if (mDialog != null) {
-            mDialog.dismiss();
-        }
-
-        if (mFetchTask != null) {
-            mFetchTask.cancel(true);
-        }
-        
-        if (mEditPostTask != null) {
-            mEditPostTask.cancel(true);
-        }
-        
-        if (mPostQuoteTask != null) {
-            mPostQuoteTask.cancel(true);
-        }
+        cleanupTasks();
     }
         
     @Override
     protected void onStop() {
         super.onStop();
 
-        if (mDialog != null) {
-            mDialog.dismiss();
-        }
-
-        if (mFetchTask != null) {
-            mFetchTask.cancel(true);
-        }
-        
-        if (mEditPostTask != null) {
-            mEditPostTask.cancel(true);
-        }
-        
-        if (mPostQuoteTask != null) {
-            mPostQuoteTask.cancel(true);
-        }
+        cleanupTasks();
     }
     
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
+        cleanupTasks();
+    }
+
+    private void cleanupTasks() {
         if (mDialog != null) {
             mDialog.dismiss();
         }
@@ -606,8 +565,11 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
                     mTitle.setText(Html.fromHtml(mThread.getTitle()));
                 }
 
-                mPageNumbers.setText("Page " + Integer.toString(mThread.getCurrentPage()) +
-                        "/" + Integer.toString(mThread.getLastPage()));
+                if (mThread.getCurrentPage() == mThread.getLastPage()) {
+                    mNext.setVisibility(View.GONE);
+                } else {
+                    mNext.setVisibility(View.VISIBLE);
+                }
 
                 if (mDialog != null) {
                     mDialog.dismiss();
@@ -623,6 +585,7 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
     	AwfulPostAdapterBase base = new AwfulPostAdapterBase(this, R.layout.post_item, posts);
     	return new AwfulPostAdapter(base);
     }
+
     /**
      * Decorates the base adapter that does the actual work with a
      * ThumbnailAdapter to render avatars, then adds SectionIndexer
@@ -762,6 +725,8 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
         	public HtmlView postBody;
         	public ImageView avatar;
         	public View postHead;
+            public TextView pageCount;
+            public RelativeLayout pageIndicator; 
         	
         	public ViewHolder(View v) {
         		username = (TextView) v.findViewById(R.id.username);
@@ -769,6 +734,8 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
         		postBody = (HtmlView) v.findViewById(R.id.postbody);
         		avatar = (ImageView) v.findViewById(R.id.avatar);
         		postHead = v.findViewById(R.id.posthead);
+                pageCount = (TextView) v.findViewById(R.id.page_count);
+                pageIndicator = (RelativeLayout) v.findViewById(R.id.page_indicator);
         	}
         }
         
@@ -802,7 +769,7 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
 
             if (current.isPreviouslyRead()) {
             	if (current.isEven()) {
-            		viewHolder.postBody	.setBackgroundColor(Constants.READ_BACKGROUND_EVEN);
+            		viewHolder.postBody.setBackgroundColor(Constants.READ_BACKGROUND_EVEN);
             	} else {
             		viewHolder.postBody.setBackgroundColor(Constants.READ_BACKGROUND_UNEVEN);
             	}
@@ -820,11 +787,28 @@ public class ThreadDisplayActivity extends Activity implements OnSharedPreferenc
 					}
 				}
             };
+
+            if (aPosition == (getCount() - 1))  {
+                viewHolder.pageIndicator.setVisibility(View.VISIBLE);
+                viewHolder.pageCount.setVisibility(View.VISIBLE);
+                viewHolder.pageCount.setText("Page " + Integer.toString(mThread.getCurrentPage()) +
+                        "/" + Integer.toString(mThread.getLastPage()));
+            } else if (viewHolder.pageCount.getVisibility() == View.VISIBLE) {
+                viewHolder.pageIndicator.setVisibility(View.GONE);
+                viewHolder.pageCount.setVisibility(View.GONE);
+            }
             
             viewHolder.postHead.setOnClickListener(listener);
             viewHolder.postBody.setOnClickListener(listener);
             
+            if( current.getAvatar() == null ) {
+            	viewHolder.avatar.setVisibility(View.INVISIBLE);
+            } else {
+            	viewHolder.avatar.setVisibility(View.VISIBLE);
+            }
+            
             viewHolder.avatar.setTag(current.getAvatar());
+            
 
             return inflatedView;
         }

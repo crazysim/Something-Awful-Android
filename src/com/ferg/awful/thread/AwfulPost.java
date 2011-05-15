@@ -27,7 +27,14 @@
 
 package com.ferg.awful.thread;
 
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.regex.Pattern;
+
 import org.htmlcleaner.CleanerProperties;
 import org.htmlcleaner.HtmlCleaner;
 import org.htmlcleaner.SimpleHtmlSerializer;
@@ -41,7 +48,7 @@ import com.ferg.awful.network.NetworkUtils;
 public class AwfulPost {
     private static final String TAG = "AwfulPost";
 
-    private static final String USERNAME_SEARCH = "//dt[@class='author']|//dt[@class='author op']|//dt[@class='author role-mod']|//dt[@class='author role-admin']|//dt[@class='author role-mod op']|//dt[@class='author role-admin op']";
+    /*private static final String USERNAME_SEARCH = "//dt[@class='author']|//dt[@class='author op']|//dt[@class='author role-mod']|//dt[@class='author role-admin']|//dt[@class='author role-mod op']|//dt[@class='author role-admin op']";
     private static final String MOD_SEARCH      = "//dt[@class='author role-mod']|//dt[@class='author role-mod op']";
     private static final String ADMIN_SEARCH    = "//dt[@class='author role-admin']|//dt[@class='author role-admin op']";
 
@@ -62,7 +69,20 @@ public class AwfulPost {
 	private static final String USERINFO  = "//tr[position()=1]/td[position()=1]"; //this would be nicer if HtmlCleaner supported starts-with
 	private static final String PROFILE_LINKS = "//ul[@class='profilelinks']//a";
     private static final String EDITABLE  = "//img[@alt='Edit']";
-	
+    */
+	//\\n\\r\\f
+    private static final Pattern fixCharacters = Pattern.compile("([\\n\\r\\f\u0091-\u0094])");
+    private static HashMap<String,String> replaceMap = new HashMap<String,String>(10);
+    static {
+    	replaceMap.put("\u0091", "'");
+    	replaceMap.put("\u0092", "'");
+    	replaceMap.put("\u0093", "\"");
+    	replaceMap.put("\u0094", "\"");
+    	replaceMap.put("\n", "");
+    	replaceMap.put("\r", "");
+    	replaceMap.put("\f", "");
+    }
+    
 	private static final String USERINFO_PREFIX = "userinfo userid-";
 
     private static final String ELEMENT_POSTBODY     = "<td class=\"postbody\">";
@@ -224,9 +244,21 @@ public class AwfulPost {
         ArrayList<AwfulPost> result = new ArrayList<AwfulPost>();
 
         try {
-            TagNode response = NetworkUtils.get(Constants.BASE_URL + mLastReadUrl);
-            
-            result = parsePosts(response);
+            List<URI> redirects = new LinkedList<URI>();
+            TagNode response = NetworkUtils.get(Constants.BASE_URL
+                    + mLastReadUrl, redirects);
+
+            int pti = -1;
+            if (redirects.size() > 1) {
+                String fragment = redirects.get(redirects.size() - 1)
+                        .getFragment();
+                if (fragment.startsWith(Constants.FRAGMENT_PTI)) {
+                    pti = Integer.parseInt(
+                            fragment.substring(Constants.FRAGMENT_PTI.length()));
+                }
+            }
+
+            result = parsePosts(response, pti);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -234,156 +266,110 @@ public class AwfulPost {
         return result;
     }
 
-    public static ArrayList<AwfulPost> parsePosts(TagNode aThread) {
+    public static ArrayList<AwfulPost> parsePosts(TagNode aThread, int pti) {
         ArrayList<AwfulPost> result = new ArrayList<AwfulPost>();
-        HtmlCleaner cleaner = new HtmlCleaner();
-        CleanerProperties properties = cleaner.getProperties();
-        properties.setOmitComments(true);
+        //HtmlCleaner cleaner = new HtmlCleaner();
+        //CleanerProperties properties = cleaner.getProperties();
+        //properties.setOmitComments(true);
+        //properties.setRecognizeUnicodeChars(false);
+		//SimpleHtmlSerializer serializer = new SimpleHtmlSerializer(properties);
 
 		boolean lastReadFound = false;
 		boolean even = false;
         try {
-            Object[] postNodes = aThread.evaluateXPath(POST);
-
-            for (Object current : postNodes) {
+        	TagNode[] postNodes = aThread.getElementsByAttValue("class", "post", true, true);
+            int index = 1;
+            for (TagNode node : postNodes) {
 				
                 AwfulPost post = new AwfulPost();
-                TagNode node = (TagNode) current;
 
                 // We'll just reuse the array of objects rather than create 
                 // a ton of them
                 String id = node.getAttributeByName("id");
                 post.setId(id.replaceAll("post", ""));
-
-                Object[] nodeList = node.evaluateXPath(POST_DATE);
-                if (nodeList.length > 0) {
-                    TagNode dateNode = (TagNode) nodeList[0];
-
-                    String lastRead = dateNode.getChildTags()[0].getAttributeByName("href");
-                    post.setLastReadUrl(lastRead.replaceAll("&amp;", "&"));
-
-                    Log.i(TAG, lastRead.replaceAll("&amp;", "&"));
-
-                    // There's got to be a better way to do this
-                    dateNode.removeChild(dateNode.findElementHavingAttribute("href", false));
-                    dateNode.removeChild(dateNode.findElementHavingAttribute("href", false));
-                    dateNode.removeChild(dateNode.findElementHavingAttribute("href", false));
-
-                    post.setDate(dateNode.getText().toString().trim());
-                }
                 
-                // The poster's userid is embedded in the class string...
-                nodeList = node.evaluateXPath(USERINFO);
-                if (nodeList.length > 0) {
-                	String classAttr = ((TagNode) nodeList[0]).getAttributeByName("class");
-                	String userid = classAttr.substring(USERINFO_PREFIX.length());
-                	post.setUserId(userid);
-                }
-                
-
-				// Assume it's a post by a normal user first
-                nodeList = node.evaluateXPath(USERNAME);
-                if (nodeList.length > 0) {
-                    post.setUsername(((TagNode) nodeList[0]).getText().toString());
-                }
-
-				// If we didn't get a username, try for an OP
-				if (post.getUsername() == null) {
-					nodeList = node.evaluateXPath(OP);
-					if (nodeList.length > 0) {
-						post.setUsername(((TagNode) nodeList[0]).getText().toString());
+                TagNode[] postContent = node.getElementsHavingAttribute("class", true);
+                for(TagNode pc : postContent){
+					if(pc.getAttributeByName("class").contains("author")){
+						post.setUsername(pc.getText().toString().trim());
 					}
-				}
-
-				// Not an OP? Maybe it's a mod
-				if (post.getUsername() == null) {
-					nodeList = node.evaluateXPath(MOD);
-					if (nodeList.length > 0) {
-						post.setUsername(((TagNode) nodeList[0]).getText().toString());
-					}
-				}
-
-				// If it's not a mod, it's probably an admin
-				if (post.getUsername() == null) {
-					nodeList = node.evaluateXPath(ADMIN);
-					if (nodeList.length > 0) {
-						post.setUsername(((TagNode) nodeList[0]).getText().toString());
-					}
-				}
-
-				// If we haven't yet found the last read post then check if
-				// this post has "last read" color highlighting. If it doesn't,
-				// it's the first unread post for the page.
-				if (!lastReadFound) {
-					nodeList = node.evaluateXPath(SEEN1);
-					if (nodeList.length > 0) {
-						post.setPreviouslyRead(true);
-					} else {
-						nodeList = node.evaluateXPath(SEEN2);
-						if (nodeList.length > 0) {
-							post.setPreviouslyRead(true);
+					if(pc.getAttributeByName("class").equalsIgnoreCase("title") && pc.getChildTags().length >0){
+						TagNode[] avatar = pc.getElementsByAttValue("class", "img", true, true);
+						if(avatar.length >0){
+							post.setAvatar(avatar[0].getAttributeByName("src"));
 						}
 					}
+					if(pc.getAttributeByName("class").equalsIgnoreCase("postbody")){
+						StringBuffer fixedContent = new StringBuffer();
+						Matcher fixCharMatch = fixCharacters.matcher(NetworkUtils.getAsString(pc));
+						while(fixCharMatch.find()){
+							fixCharMatch.appendReplacement(fixedContent, replaceMap.get(fixCharMatch.group(1)));
+							}
+						fixCharMatch.appendTail(fixedContent);
+	                    post.setContent(fixedContent.toString());
+					}
+					if(pc.getAttributeByName("class").equalsIgnoreCase("postdate")){//done
+						if(pc.getChildTags().length>0){
+							post.setLastReadUrl(pc.getChildTags()[0].getAttributeByName("href").replaceAll("&amp;", "&"));
+						}
+						post.setDate(pc.getText().toString().replaceAll("[^\\w\\s:,]", "").trim());
+					}
+					if(pc.getAttributeByName("class").equalsIgnoreCase("profilelinks")){
+						TagNode[] links = pc.getElementsHavingAttribute("href", true);
+						if(links.length >0){
+							String href = links[0].getAttributeByName("href").trim();
+							post.setUserId(href.substring(href.lastIndexOf("rid=")+4));
+							for (TagNode linkNode : links) {
+			                	String link = linkNode.getText().toString();
+			                	if     (link.equals(LINK_PROFILE))      post.setHasProfileLink(true);
+			                	else if(link.equals(LINK_MESSAGE))      post.setHasMessageLink(true);
+			                	else if(link.equals(LINK_POST_HISTORY)) post.setHasPostHistoryLink(true);
+			                	// Rap sheet is actually filled in by javascript for some stupid reason
+			                }
+						}
+					}
+					if((pti != -1 && index < pti) ||
+					   (pc.getAttributeByName("class").contains("seen") && !lastReadFound)){
+						post.setPreviouslyRead(true);
+					}
 
-					if (!post.isPreviouslyRead()) {
-						post.setLastRead(true);
-						lastReadFound = true;
+                    if (!post.isPreviouslyRead()) {
+                        post.setLastRead(true);
+                        lastReadFound = true;
+                    }
+
+					if(pc.getAttributeByName("class").equalsIgnoreCase("editedby") && pc.getChildTags().length >0){
+						post.setEdited("<i>" + pc.getChildTags()[0].getText().toString() + "</i>");
 					}
 				}
+                
 				post.setEven(even); // even/uneven post for alternating colors
 				even = !even;
 				
 				
-                nodeList = node.evaluateXPath(AVATAR);
-                if (nodeList.length > 0) {
-                    post.setAvatar(((TagNode) nodeList[0]).getAttributeByName("src"));
-                }
-				
-                nodeList = node.evaluateXPath(SEEN_LINK);
-                if (nodeList.length > 0) {
-                    Log.i(TAG, ((TagNode) nodeList[0]).getAttributeByName("href"));
-                    post.setLastReadUrl(((TagNode) nodeList[0]).getAttributeByName("href"));
-                }
-
-                nodeList = node.evaluateXPath(EDITED);
-                if (nodeList.length > 0) {
-                    post.setEdited("<i>" + ((TagNode) nodeList[0]).getText().toString() + "</i>");
-                }
-
-                nodeList = node.evaluateXPath(EDITABLE);
-                if (nodeList.length > 0) {
+                
+				TagNode[] editImgs = node.getElementsByAttValue("alt", "Edit", true, true);
+                if (editImgs.length > 0) {
                     Log.i(TAG, "Editable!");
                     post.setEditable(true);
                 } else {
                     post.setEditable(false);
                 }
 
-                nodeList = node.evaluateXPath(POSTBODY);
-                if (nodeList.length > 0) {
-                    SimpleHtmlSerializer serializer = 
-                        new SimpleHtmlSerializer(cleaner.getProperties());
-
-                    post.setContent(serializer.getAsString((TagNode) nodeList[0]));
-                }
-                
-                // We know how to make the links, but we need to note what links are active for the poster
-                nodeList = node.evaluateXPath(PROFILE_LINKS);
-                for (Object linkNode : nodeList) {
-                	String link = ((TagNode) linkNode).getText().toString();
-                	if     (link.equals(LINK_PROFILE))      post.setHasProfileLink(true);
-                	else if(link.equals(LINK_MESSAGE))      post.setHasMessageLink(true);
-                	else if(link.equals(LINK_POST_HISTORY)) post.setHasPostHistoryLink(true);
-                	// Rap sheet is actually filled in by javascript for some stupid reason
-                }
                 //it's always there though, so we can set it true without an explicit check
                 post.setHasRapSheetLink(true);
-
                 result.add(post);
+                index++;
             }
 
+            // if there are zero unread posts the pti points to what the next post
+            // would be. a thread with 6 posts would have a pti of 7 
+            if (index == pti) {
+                result.get(result.size() - 1).setLastRead(true);
+                lastReadFound = true;
+            }
+            
             Log.i(TAG, Integer.toString(postNodes.length));
-        } catch (XPatherException e) {
-            e.printStackTrace();
         } catch (Exception e) {
             e.printStackTrace();
         }

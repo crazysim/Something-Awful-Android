@@ -27,8 +27,6 @@
 
 package com.ferg.awful;
 
-import java.util.ArrayList;
-
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
@@ -38,28 +36,24 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.app.ListFragment;
 import android.text.Html;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
-import android.view.ContextMenu;
+import android.view.*;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.support.v4.app.ListFragment;
-
 import com.ferg.awful.constants.Constants;
 import com.ferg.awful.reply.Reply;
 import com.ferg.awful.service.AwfulServiceConnection.ThreadListAdapter;
 import com.ferg.awful.thread.AwfulPost;
 import com.ferg.awful.thread.AwfulThread;
 import com.ferg.awful.widget.NumberPicker;
+
+import java.util.ArrayList;
 
 public class ThreadDisplayFragment extends ListFragment implements OnSharedPreferenceChangeListener, AwfulUpdateCallback {
     private static final String TAG = "ThreadDisplayActivity";
@@ -92,7 +86,8 @@ public class ThreadDisplayFragment extends ListFragment implements OnSharedPrefe
         mTitle    = (TextView) result.findViewById(R.id.title);
         mNext     = (ImageButton) result.findViewById(R.id.next_page);
         mReply    = (ImageButton) result.findViewById(R.id.reply);
-        
+
+        mTitle.setMovementMethod(new ScrollingMovementMethod());
         
         return result;
     }

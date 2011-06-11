@@ -1,2 +1,16 @@
 local.properties
 *.swp
+*~
+gen/
+*.DS_Store
+*.class
+*java#
+*.classpath
+*.project
+*.settings
+bin/
+*.iml
+*.ipr
+*.iws
+.idea/
+out/

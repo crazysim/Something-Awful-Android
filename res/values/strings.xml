@@ -24,6 +24,10 @@
     <string name="use_large_scrollbar_summary">The kind you can touch and fling</string>
     <string name="default_post_font_size">Default Post Font Size</string>
     <string name="default_post_font_color">Default Post Font Color</string>
+    <string name="default_post_background_color">Default Post BG Color</string>
+    <string name="default_post_background2_color">Alternative Post/BG Color</string>
+    <string name="read_post_background_color">Read Post BG Color</string>
+    <string name="read_post_font_color">Read Post BG Color</string>
     <string name="press_color_to_apply">Press color to apply</string>
     <string name="dialog_color_picker">Select Color</string>
     <string name="about">About...</string>
@@ -37,4 +41,9 @@
 		<item>Portrait</item>
 		<item>Landscape</item>
 	</string-array>
+	<string name="bookmark">Bookmark</string>
+	<string name="unbookmark">Unbookmark</string>
+	<string name="load_images">Load Images</string>
+	<string name="load_images_summary">If disabled, images are replaced with links.</string>
+	<string name="read_post_background2_color">Read Post Alternate Color</string>
 </resources>

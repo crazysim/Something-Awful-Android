@@ -3,7 +3,8 @@ package com.ferg.awful;
 import android.app.Application;
 
 /**
- * Allows application-wide access to the global image cache
+ * Class originally declared to allowed application-wide access to the global image cache.
+ * Now it is also used to do ARCA stuff.
  *
  * @author brosmike
  */

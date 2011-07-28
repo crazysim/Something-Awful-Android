@@ -11,7 +11,7 @@ import org.acra.annotation.*;
  * @author brosmike
  */
 
-@ReportsCrashes(formKey = "dFBFM1pxcWw0ZUFoU1J4b2FNRFVaTWc6MQ")
+@ReportsCrashes(formUri = "http://www.bugsense.com/api/acra?api_key=7d1cdc11", formKey="")
 public class AwfulApplication extends Application {
 	private static String TAG="AwfulApplication";
 

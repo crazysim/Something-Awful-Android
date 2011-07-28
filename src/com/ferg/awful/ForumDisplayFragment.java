@@ -96,7 +96,7 @@ public class ForumDisplayFragment extends ListFragment implements AwfulUpdateCal
         if (!isHoneycomb()) {
             View actionbar = ((ViewStub) result.findViewById(R.id.actionbar)).inflate();
             mTitle         = (TextView) actionbar.findViewById(R.id.title);
-            mUserCp        = (ImageButton) actionbar.findViewById(R.id.user_cp);
+            mUserCp        = (ImageButton) actionbar.findViewById(R.id.title);
             mRefresh       = (ImageButton) actionbar.findViewById(R.id.refresh);
 
             mTitle.setMovementMethod(new ScrollingMovementMethod());
